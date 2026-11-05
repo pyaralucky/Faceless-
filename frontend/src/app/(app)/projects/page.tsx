@@ -87,8 +87,8 @@ function NewProjectModal({ channels, defaultChannel, onClose }: { channels: Chan
           title="Create a channel first"
           description="Projects belong to a channel."
           action={
-            <Link href="/channels">
-              <Button variant="primary">Go to channels</Button>
+            <Link href="/channels" className="inline-flex h-10 items-center rounded-md bg-accent-600 px-4 text-sm font-medium text-white hover:bg-accent-500">
+              Go to channels
             </Link>
           }
         />
