@@ -1,0 +1,95 @@
+# Faceless AI Studio — full stack.
+#   cp .env.example .env   (then edit secrets)
+#   docker compose up -d --build
+name: faceless
+
+x-backend: &backend
+  build:
+    context: ./backend
+    target: runtime
+  image: faceless-backend:latest
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-faceless}:${POSTGRES_PASSWORD:-faceless}@db:5432/${POSTGRES_DB:-faceless}
+    REDIS_URL: redis://redis:6379/0
+    STORAGE_ROOT: /data
+  volumes:
+    - media:/data
+  restart: unless-stopped
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-faceless}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-faceless}
+      POSTGRES_DB: ${POSTGRES_DB:-faceless}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  migrate:
+    <<: *backend
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    <<: *backend
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  worker:
+    <<: *backend
+    command: ["arq", "app.workers.worker.WorkerSettings"]
+    healthcheck:
+      test: ["CMD", "arq", "--check", "app.workers.worker.WorkerSettings"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:8000}
+    image: faceless-web:latest
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
+  media:
