@@ -33,6 +33,6 @@ Faceless AI Studio talks to social platforms **only** through their official, do
 
 ## Data handling
 
-- Disconnecting an account revokes the Google token where possible and deletes the stored tokens.
+- Disconnecting an account revokes the Google token where possible, wipes the stored tokens and cancels its pending posts. The account row stays (marked `revoked`) so publish history and analytics are kept.
 - Deleting a project removes its database rows (cascade) and its media directory.
 - All tenant tables use `ON DELETE CASCADE` from `organizations`, so deleting an organization removes all of its data in one operation. Self-service organization deletion is not exposed in the API yet; a platform admin performs it on request.

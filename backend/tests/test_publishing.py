@@ -257,3 +257,23 @@ async def test_analytics_collection_and_report(owner, db, session_factory, yt):
     assert (await owner.post("/analytics/collect")).status_code == 202
     dash = (await owner.get("/dashboard")).json()
     assert dash["total_views"] == 1000 and dash["counts"]["published_posts"] == 1
+
+
+async def test_disconnect_keeps_history_and_cancels_pending(owner, db, session_factory, yt):
+    p, _, account = await _setup(owner, db)
+    published = (
+        await owner.post("/publishing/jobs", json={"project_id": p["id"], "social_account_id": str(account.id)})
+    ).json()
+    await execute_publish(session_factory, uuid.UUID(published["id"]))
+    future = (datetime.now(UTC) + timedelta(days=1)).isoformat()
+    pending = (
+        await owner.post(
+            "/publishing/jobs",
+            json={"project_id": p["id"], "social_account_id": str(account.id), "scheduled_at": future},
+        )
+    ).json()
+    assert (await owner.delete(f"/social/accounts/{account.id}")).status_code == 200
+    acc = (await owner.get("/social/accounts")).json()[0]
+    assert acc["status"] == "revoked"
+    assert (await owner.get(f"/publishing/jobs/{published['id']}")).json()["status"] == "published"
+    assert (await owner.get(f"/publishing/jobs/{pending['id']}")).json()["status"] == "cancelled"

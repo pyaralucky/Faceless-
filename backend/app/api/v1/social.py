@@ -7,18 +7,18 @@ from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import RedirectResponse
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import Admin, Editor, OrgContext, Viewer
 from app.core.config import settings
 from app.core.errors import AppError, ValidationFailedError
 from app.core.logging import get_logger
-from app.core.security import decrypt_secret
+from app.core.security import decrypt_secret, encrypt_secret
 from app.db.session import get_db
 from app.integrations.base import PlatformError
-from app.models import Channel, SocialAccount
-from app.models.enums import Platform, SocialAccountStatus
+from app.models import Channel, PublishJob, SocialAccount
+from app.models.enums import Platform, PublishStatus, SocialAccountStatus
 from app.schemas.common import Message
 from app.schemas.social import OAuthStartOut, SocialAccountOut, SocialAccountUpdate
 from app.services import social as social_service
@@ -124,7 +124,20 @@ async def disconnect(account_id: uuid.UUID, ctx: OrgContext = Admin, db: AsyncSe
             )
         except Exception:  # noqa: BLE001
             log.warning("token_revoke_failed", extra={"account_id": str(acc.id)})
+    # Soft-revoke: wipe credentials but keep the row so publish history and analytics survive.
+    # Reconnecting the same platform account through OAuth reactivates it.
     acc.status = SocialAccountStatus.REVOKED
+    acc.encrypted_access_token = encrypt_secret("")
+    acc.encrypted_refresh_token = None
+    acc.token_expires_at = None
+    await db.execute(
+        update(PublishJob)
+        .where(
+            PublishJob.social_account_id == acc.id,
+            PublishJob.status.in_([PublishStatus.SCHEDULED, PublishStatus.PENDING_APPROVAL]),
+        )
+        .values(status=PublishStatus.CANCELLED, next_attempt_at=None, last_error="Social account disconnected")
+    )
     record_audit(
         db,
         action="social.disconnected",
@@ -133,6 +146,5 @@ async def disconnect(account_id: uuid.UUID, ctx: OrgContext = Admin, db: AsyncSe
         entity_type="social_account",
         entity_id=acc.id,
     )
-    await db.delete(acc)
     await db.commit()
     return Message(message="Account disconnected")

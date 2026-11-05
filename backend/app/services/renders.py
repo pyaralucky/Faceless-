@@ -82,7 +82,8 @@ async def build_render_spec(db: AsyncSession, org_id: uuid.UUID, project: Projec
                     duration=float(sc.get("duration_sec", 4)),
                     text=sc.get("narration", ""),
                     # Text-only cards show the narration as a headline unless captions already carry it.
-                    overlay_text=sc.get("overlay_text", "") or ("" if visual or req.burn_subtitles else sc.get("narration", "")[:90]),
+                    overlay_text=sc.get("overlay_text", "")
+                    or ("" if visual or req.burn_subtitles else sc.get("narration", "")[:90]),
                     transition=sc.get("transition", "fade"),
                     motion=sc.get("motion", "zoom_in"),
                     background_color=palette[i % len(palette)],
