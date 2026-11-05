@@ -1,0 +1,56 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  @apply bg-zinc-950 text-zinc-100 antialiased;
+}
+
+body {
+  font-feature-settings: "cv11", "ss01";
+}
+
+::selection {
+  @apply bg-accent-500/40 text-white;
+}
+
+@layer components {
+  .data-table thead th {
+    @apply whitespace-nowrap border-b border-zinc-800 px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-zinc-500;
+  }
+  .data-table tbody td {
+    @apply border-b border-zinc-800/70 px-4 py-3 align-middle text-zinc-300;
+  }
+  .data-table tbody tr:last-child td {
+    @apply border-b-0;
+  }
+  .data-table tbody tr {
+    @apply transition-colors hover:bg-zinc-800/30;
+  }
+  .prose-output p {
+    @apply leading-relaxed text-zinc-300;
+  }
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.toast-in {
+  animation: toast-in 160ms ease-out;
+}
+
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.8);
+}
