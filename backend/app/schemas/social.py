@@ -69,6 +69,9 @@ class PublishJobOut(Entity):
     external_url: str | None
     published_at: datetime | None
     history: list[dict[str, Any]]
+    # Populated by list endpoints so clients don't need extra lookups.
+    project_title: str | None = None
+    account_name: str | None = None
 
 
 class ApprovalCreate(BaseModel):
@@ -91,6 +94,7 @@ class ApprovalOut(Entity):
     request_note: str
     decision_note: str | None
     decided_at: datetime | None
+    project_title: str | None = None
 
 
 class AnalyticsSnapshotOut(Entity):

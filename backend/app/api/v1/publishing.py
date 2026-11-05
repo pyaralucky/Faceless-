@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import Editor, OrgContext, Viewer
 from app.core.errors import ConflictError
 from app.db.session import get_db
-from app.models import ApprovalRequest, PublishJob
+from app.models import ApprovalRequest, Project, PublishJob, SocialAccount
 from app.models.enums import ApprovalStatus, PublishStatus
 from app.schemas.common import Page
 from app.schemas.social import PublishJobCreate, PublishJobOut, PublishJobUpdate
@@ -60,13 +60,20 @@ async def list_jobs(
         stmt = stmt.where(PublishJob.platform == platform)
     total = await db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = (
-        await db.scalars(
-            stmt.order_by(func.coalesce(PublishJob.scheduled_at, PublishJob.created_at).desc())
+        await db.execute(
+            stmt.add_columns(Project.title, SocialAccount.display_name)
+            .join(Project, Project.id == PublishJob.project_id)
+            .join(SocialAccount, SocialAccount.id == PublishJob.social_account_id)
+            .order_by(func.coalesce(PublishJob.scheduled_at, PublishJob.created_at).desc())
             .limit(limit)
             .offset(offset)
         )
     ).all()
-    return Page(items=[PublishJobOut.model_validate(r) for r in rows], total=total, limit=limit, offset=offset)
+    items = [
+        PublishJobOut.model_validate(job).model_copy(update={"project_title": title, "account_name": account})
+        for job, title, account in rows
+    ]
+    return Page(items=items, total=total, limit=limit, offset=offset)
 
 
 @router.get("/jobs/{job_id}", response_model=PublishJobOut)

@@ -211,3 +211,25 @@ async def test_failed_render_can_resume(owner, session_factory, tmp_media, db):
     assert (await owner.post(f"/renders/{job_id}/resume")).status_code == 202
     assert await execute_render_job(session_factory, job_id) == "succeeded"
     assert (await owner.get(f"/renders/{job_id}")).json()["attempts"] == 2
+
+
+async def test_render_events_stream(owner, db):
+    from app.models import RenderJob
+
+    ch = await make_channel(owner)
+    p = await make_project(owner, ch["id"])
+    job = RenderJob(
+        organization_id=uuid.UUID(owner.org_id),
+        project_id=uuid.UUID(p["id"]),
+        format="vertical",
+        status="succeeded",
+        stage="completed",
+        progress=100.0,
+    )
+    db.add(job)
+    await db.commit()
+    r = await owner.get(f"/renders/{job.id}/events")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/event-stream")
+    frames = [json.loads(line[6:]) for line in r.text.splitlines() if line.startswith("data: ")]
+    assert frames == [{"status": "succeeded", "stage": "completed", "progress": 100.0, "error": None}]
+    assert (await owner.get(f"/renders/{uuid.uuid4()}/events")).status_code == 404

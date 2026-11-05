@@ -204,3 +204,37 @@ describe("multipart upload", () => {
     expect(header(init, "X-Org-Id")).toBe("org-1");
   });
 });
+
+describe("Server-Sent Events", () => {
+  it("parses frames split across chunks and sends auth + org headers", async () => {
+    const chunks = ['data: {"status":"running","stage":"scenes","progress":1', '0,"error":null}\n\nda', 'ta: {"status":"succeeded","stage":"completed","progress":100,"error":null}\n\n'];
+    const { api, calls } = setup(
+      () =>
+        new Response(
+          new ReadableStream({
+            start(ctrl) {
+              for (const c of chunks) ctrl.enqueue(new TextEncoder().encode(c));
+              ctrl.close();
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "text/event-stream" } },
+        ),
+    );
+    const events = [];
+    for await (const ev of api.renders.events("job-1")) events.push(ev);
+    expect(events.map((e) => [e.stage, e.progress])).toEqual([
+      ["scenes", 10],
+      ["completed", 100],
+    ]);
+    expect(calls[0].url).toBe("http://api.test/api/v1/renders/job-1/events");
+    expect(header(calls[0].init, "Authorization")).toBe("Bearer access-1");
+    expect(header(calls[0].init, "X-Org-Id")).toBe("org-1");
+  });
+
+  it("throws ApiError when the stream request fails", async () => {
+    const { api } = setup(() => envelope(404, "not_found", "Render job not found"));
+    await expect(async () => {
+      for await (const _ of api.renders.events("missing")) void _;
+    }).rejects.toBeInstanceOf(ApiError);
+  });
+});

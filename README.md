@@ -4,7 +4,7 @@ A multi-tenant SaaS for producing **faceless videos** end to end: AI agents rese
 
 | Layer | Tech |
 |---|---|
-| Frontend | Next.js 14 (App Router), TypeScript, Tailwind CSS |
+| Frontend | Next.js 15 (App Router), React 19, TypeScript, Tailwind CSS |
 | API | FastAPI, SQLAlchemy 2 (async), Pydantic v2 |
 | Data | PostgreSQL 16 (JSONB), Redis 7 |
 | Background jobs | arq (Redis) worker with cron scheduling |

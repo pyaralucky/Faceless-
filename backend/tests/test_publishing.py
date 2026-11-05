@@ -277,3 +277,18 @@ async def test_disconnect_keeps_history_and_cancels_pending(owner, db, session_f
     assert acc["status"] == "revoked"
     assert (await owner.get(f"/publishing/jobs/{published['id']}")).json()["status"] == "published"
     assert (await owner.get(f"/publishing/jobs/{pending['id']}")).json()["status"] == "cancelled"
+
+
+async def test_lists_include_titles_and_approval_history_filter(owner, db, yt):
+    reviewer = await add_member(owner, "reviewer")
+    p, _, account = await _setup(owner, db, require_approval=True)
+    for _ in range(2):
+        await owner.post("/publishing/jobs", json={"project_id": p["id"], "social_account_id": str(account.id)})
+    jobs = (await owner.get("/publishing/jobs")).json()["items"]
+    assert {j["project_title"] for j in jobs} == {p["title"]} and jobs[0]["account_name"] == "My Channel"
+    pending = (await owner.get("/approvals?decided=false")).json()
+    assert pending["total"] == 2 and pending["items"][0]["project_title"] == p["title"]
+    await reviewer.post(f"/approvals/{pending['items'][0]['id']}/decision", json={"decision": "reject"})
+    history = (await owner.get("/approvals?decided=true")).json()
+    assert history["total"] == 1 and history["items"][0]["status"] == "rejected"
+    assert (await owner.get("/approvals?decided=false")).json()["total"] == 1

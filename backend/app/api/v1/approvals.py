@@ -23,6 +23,7 @@ router = APIRouter(prefix="/approvals", tags=["approvals"])
 @router.get("", response_model=Page[ApprovalOut])
 async def list_approvals(
     status_: ApprovalStatus | None = Query(None, alias="status"),
+    decided: bool | None = Query(None, description="true = approved/rejected/cancelled only; false = pending only"),
     project_id: uuid.UUID | None = None,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
@@ -32,11 +33,27 @@ async def list_approvals(
     stmt = select(ApprovalRequest).where(ApprovalRequest.organization_id == ctx.org_id)
     if status_:
         stmt = stmt.where(ApprovalRequest.status == status_)
+    if decided is not None:
+        stmt = stmt.where(
+            ApprovalRequest.status != ApprovalStatus.PENDING
+            if decided
+            else ApprovalRequest.status == ApprovalStatus.PENDING
+        )
     if project_id:
         stmt = stmt.where(ApprovalRequest.project_id == project_id)
     total = await db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
-    rows = (await db.scalars(stmt.order_by(ApprovalRequest.created_at.desc()).limit(limit).offset(offset))).all()
-    return Page(items=[ApprovalOut.model_validate(r) for r in rows], total=total, limit=limit, offset=offset)
+    order = ApprovalRequest.decided_at.desc() if decided else ApprovalRequest.created_at.desc()
+    rows = (
+        await db.execute(
+            stmt.add_columns(Project.title)
+            .join(Project, Project.id == ApprovalRequest.project_id)
+            .order_by(order, ApprovalRequest.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+    ).all()
+    items = [ApprovalOut.model_validate(a).model_copy(update={"project_title": title}) for a, title in rows]
+    return Page(items=items, total=total, limit=limit, offset=offset)
 
 
 @router.post("", response_model=ApprovalOut, status_code=status.HTTP_201_CREATED)

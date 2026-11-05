@@ -514,6 +514,9 @@ export interface PublishJob extends Entity {
   external_url: string | null;
   published_at: ISODate | null;
   history: PublishHistoryEntry[];
+  /** Present on list responses only. */
+  project_title?: string | null;
+  account_name?: string | null;
 }
 
 export interface ApprovalCreate {
@@ -536,6 +539,8 @@ export interface Approval extends Entity {
   request_note: string;
   decision_note: string | null;
   decided_at: ISODate | null;
+  /** Present on list responses only. */
+  project_title?: string | null;
 }
 
 // ------------------------------------------------------------------ analytics & dashboard
@@ -617,4 +622,12 @@ export interface DashboardData {
   upcoming_posts: { id: UUID; title: string; platform: Platform; status: PublishStatus; scheduled_at: ISODate | null }[];
   recent_agent_runs: { id: UUID; project_id: UUID; status: RunStatus; tokens: number; created_at: ISODate }[];
   active_renders: { id: UUID; project_id: UUID; progress: number; stage: string; status: RunStatus }[];
+}
+
+/** Payload of GET /renders/{id}/events (Server-Sent Events). */
+export interface RenderProgressEvent {
+  status: RunStatus;
+  stage: string;
+  progress: number;
+  error: string | null;
 }

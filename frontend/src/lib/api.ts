@@ -54,6 +54,7 @@ import type {
   RegisterRequest,
   RenderCreate,
   RenderJob,
+  RenderProgressEvent,
   Role,
   RunStatus,
   SocialAccount,
@@ -331,6 +332,37 @@ export class ApiClient {
   }
 
   /**
+   * Consume a Server-Sent Events stream (auth + X-Org-Id headers included, which
+   * the browser's EventSource cannot send). Yields each `data:` payload parsed as JSON.
+   */
+  async *events<T>(path: string, signal?: AbortSignal): AsyncGenerator<T> {
+    const res = await this.raw("GET", path, { signal });
+    if (!res.body) return;
+    const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+    let buffer = "";
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += value;
+        let sep: number;
+        while ((sep = buffer.search(/\r?\n\r?\n/)) !== -1) {
+          const frame = buffer.slice(0, sep);
+          buffer = buffer.slice(sep).replace(/^\r?\n\r?\n/, "");
+          const data = frame
+            .split(/\r?\n/)
+            .filter((l) => l.startsWith("data:"))
+            .map((l) => l.slice(5).trimStart())
+            .join("\n");
+          if (data) yield JSON.parse(data) as T;
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
+  /**
    * Refresh the access token. Concurrent callers share a single in-flight
    * request. Resolves true on success, false otherwise.
    */
@@ -481,6 +513,8 @@ export function createApi(c: ApiClient) {
       get: (id: string) => c.get<RenderJob>(`/renders/${id}`),
       resume: (id: string) => c.post<RenderJob>(`/renders/${id}/resume`),
       cancel: (id: string) => c.post<RenderJob>(`/renders/${id}/cancel`),
+      /** Live progress stream (SSE). */
+      events: (id: string, signal?: AbortSignal) => c.events<RenderProgressEvent>(`/renders/${id}/events`, signal),
     },
 
     social: {
@@ -502,7 +536,7 @@ export function createApi(c: ApiClient) {
     },
 
     approvals: {
-      list: (q: { status?: ApprovalStatus; project_id?: string; limit?: number; offset?: number } = {}) => c.get<Page<Approval>>("/approvals", q),
+      list: (q: { status?: ApprovalStatus; decided?: boolean; project_id?: string; limit?: number; offset?: number } = {}) => c.get<Page<Approval>>("/approvals", q),
       request: (data: ApprovalCreate) => c.post<Approval>("/approvals", data),
       decide: (id: string, data: ApprovalDecision) => c.post<Approval>(`/approvals/${id}/decision`, data),
     },

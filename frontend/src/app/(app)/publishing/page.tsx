@@ -27,9 +27,7 @@ export default function PublishingPage() {
 
   const jobs = useQuery(`publishing:${orgId}:${status}:${platform}:${offset}`, () => api.publishing.list({ status, platform, limit: LIMIT, offset }), { interval: 15_000 });
   const accounts = useQuery(`accounts:${orgId}`, () => api.social.accounts());
-  const projects = useQuery(`projects-all:${orgId}`, () => api.projects.list({ limit: 200 }));
   const accountName = useMemo(() => new Map((accounts.data ?? []).map((a) => [a.id, a.display_name])), [accounts.data]);
-  const projectTitle = useMemo(() => new Map((projects.data?.items ?? []).map((p) => [p.id, p.title])), [projects.data]);
 
   const groups = useMemo(() => {
     const m = new Map<string, PublishJob[]>();
@@ -40,7 +38,7 @@ export default function PublishingPage() {
     return [...m.entries()];
   }, [jobs.data]);
 
-  const upsert = (j: PublishJob) => jobs.setData((prev) => (prev ? { ...prev, items: prev.items.map((x) => (x.id === j.id ? j : x)) } : prev));
+  const upsert = (j: PublishJob) => jobs.setData((prev) => (prev ? { ...prev, items: prev.items.map((x) => (x.id === j.id ? { ...j, project_title: j.project_title ?? x.project_title, account_name: j.account_name ?? x.account_name } : x)) } : prev));
   const todayKey = dayKey({ scheduled_at: new Date().toISOString() } as PublishJob);
 
   return (
@@ -90,7 +88,7 @@ export default function PublishingPage() {
               </h2>
               <Card className="divide-y divide-zinc-800">
                 {list.map((j) => (
-                  <PublishJobRow key={j.id} job={j} accountName={accountName.get(j.social_account_id)} projectTitle={projectTitle.get(j.project_id)} onChange={upsert} showProject />
+                  <PublishJobRow key={j.id} job={j} accountName={j.account_name ?? accountName.get(j.social_account_id)} projectTitle={j.project_title ?? undefined} onChange={upsert} showProject />
                 ))}
               </Card>
             </section>

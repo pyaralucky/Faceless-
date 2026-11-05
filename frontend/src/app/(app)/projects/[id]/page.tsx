@@ -33,6 +33,8 @@ function Workspace() {
   const channel = useQuery(channelId ? `channel:${channelId}` : null, () => api.channels.get(channelId as string));
   const setProjectData = project.setData;
   const onChange = useCallback((p: Project) => setProjectData(p), [setProjectData]);
+  const reloadProject = project.reload;
+  const onProjectStale = useCallback(() => void reloadProject(true), [reloadProject]);
 
   const setTab = (t: Tab) => {
     const sp = new URLSearchParams(params.toString());
@@ -89,7 +91,7 @@ function Workspace() {
       {tab === "overview" && <OverviewTab key={p.updated_at} project={p} channel={channel.data} onChange={onChange} />}
       {tab === "agents" && <AgentsTab project={p} onChange={onChange} initialRunId={params.get("run")} />}
       {tab === "assets" && <AssetsTab projectId={p.id} />}
-      {tab === "render" && <RenderTab project={p} channel={channel.data} initialRenderId={params.get("render")} />}
+      {tab === "render" && <RenderTab project={p} channel={channel.data} initialRenderId={params.get("render")} onProjectStale={onProjectStale} />}
       {tab === "publish" && <PublishTab project={p} channel={channel.data} />}
     </>
   );

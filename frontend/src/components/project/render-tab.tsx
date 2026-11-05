@@ -323,15 +323,37 @@ function Media({ projectId, job }: { projectId: string; job: RenderJob }) {
 function RenderDetail({ jobId, initial, onUpdate }: { jobId: string; initial?: RenderJob; onUpdate: (j: RenderJob) => void }) {
   const { can } = useAuth();
   const toast = useToast();
-  const [poll, setPoll] = useState(initial ? ACTIVE.has(initial.status) : true);
+  // Live progress comes from the SSE stream; polling is only a fallback if the stream fails.
+  const [active, setActive] = useState(initial ? ACTIVE.has(initial.status) : true);
+  const [poll, setPoll] = useState(false);
   const q = useQuery(`render:${jobId}`, () => api.renders.get(jobId), { interval: poll ? 2000 : false });
   const job = q.data ?? initial;
+  const { setData, reload } = q;
 
   useEffect(() => {
     if (!q.data) return;
-    setPoll(ACTIVE.has(q.data.status));
+    setActive(ACTIVE.has(q.data.status));
+    if (!ACTIVE.has(q.data.status)) setPoll(false);
     onUpdate(q.data);
   }, [q.data, onUpdate]);
+
+  useEffect(() => {
+    if (!active) return;
+    const ctrl = new AbortController();
+    void (async () => {
+      try {
+        for await (const ev of api.renders.events(jobId, ctrl.signal)) {
+          setData((prev) => (prev ? { ...prev, ...ev } : prev));
+          if (!ACTIVE.has(ev.status)) break;
+        }
+        // Terminal state: fetch the full job (QC report, output asset ids).
+        if (!ctrl.signal.aborted) void reload(true);
+      } catch {
+        if (!ctrl.signal.aborted) setPoll(true);
+      }
+    })();
+    return () => ctrl.abort();
+  }, [active, jobId, setData, reload]);
 
   if (!job) return q.error ? <ErrorState error={q.error} /> : <LoadingBlock />;
   const checks = job.qc_report?.checks ?? [];
@@ -339,7 +361,7 @@ function RenderDetail({ jobId, initial, onUpdate }: { jobId: string; initial?: R
     try {
       const j = await fn();
       q.setData(j);
-      setPoll(ACTIVE.has(j.status));
+      setActive(ACTIVE.has(j.status));
       toast.success(msg);
     } catch (e) {
       toast.error(e);
@@ -424,7 +446,18 @@ function RenderDetail({ jobId, initial, onUpdate }: { jobId: string; initial?: R
   );
 }
 
-export function RenderTab({ project, channel, initialRenderId }: { project: Project; channel?: Channel; initialRenderId?: string | null }) {
+export function RenderTab({
+  project,
+  channel,
+  initialRenderId,
+  onProjectStale,
+}: {
+  project: Project;
+  channel?: Channel;
+  initialRenderId?: string | null;
+  /** Called when a render changes state, since the backend updates the project status too. */
+  onProjectStale?: () => void;
+}) {
   const { can } = useAuth();
   const assets = useQuery(`assets:${project.id}`, () => api.assets.list(project.id));
   const renders = useQuery(`renders:${project.id}`, () => api.renders.list({ project_id: project.id, limit: 50 }));
@@ -444,9 +477,10 @@ export function RenderTab({ project, channel, initialRenderId }: { project: Proj
       const old = itemsRef.current.find((x) => x.id === j.id);
       if (!old || (old.updated_at === j.updated_at && old.progress === j.progress && old.status === j.status)) return;
       if (old.status !== j.status && j.status === "succeeded") void reloadAssets(true);
+      if (old.status !== j.status) onProjectStale?.();
       setRenders((prev) => (prev ? { ...prev, items: prev.items.map((x) => (x.id === j.id ? j : x)) } : prev));
     },
-    [setRenders, reloadAssets],
+    [setRenders, reloadAssets, onProjectStale],
   );
 
   const selectedJob = items.find((j) => j.id === selected);
@@ -481,7 +515,7 @@ export function RenderTab({ project, channel, initialRenderId }: { project: Proj
           )}
         </Card>
         <Card className="lg:col-span-2">
-          <CardHeader title="Render detail" description="Live progress (polled every 2s), QC report and preview." />
+          <CardHeader title="Render detail" description="Live progress (streamed), QC report and preview." />
           <CardBody>
             {selected ? (
               <RenderDetail key={selected} jobId={selected} initial={selectedJob} onUpdate={onUpdate} />

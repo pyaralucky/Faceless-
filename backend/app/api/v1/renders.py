@@ -110,6 +110,9 @@ async def render_events(
     import asyncio
 
     await get_scoped(db, RenderJob, job_id, ctx.org_id, label="Render job")
+    # Release the request's pooled connection now: the stream can stay open for a long time and
+    # each poll below uses its own short-lived session.
+    await db.close()
 
     async def stream() -> AsyncIterator[str]:
         last = None

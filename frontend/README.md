@@ -1,6 +1,6 @@
 # Faceless AI Studio — Frontend
 
-Next.js 14 (App Router) + React 18 + TypeScript (strict) + Tailwind CSS 3 web app for
+Next.js 15 (App Router) + React 19 + TypeScript (strict) + Tailwind CSS 3 web app for
 Faceless AI Studio: a multi-tenant SaaS for researching, scripting, rendering and
 publishing faceless AI videos. It talks to the FastAPI backend in `../backend`.
 
@@ -45,7 +45,7 @@ docker build -t faceless-frontend --build-arg NEXT_PUBLIC_API_URL=https://api.ex
 docker run -p 3000:3000 faceless-frontend
 ```
 
-The image is multi-stage on `node:20-alpine`, runs as a non-root user (`nextjs`, uid 1001)
+The image is multi-stage on `node:22-alpine`, runs as a non-root user (`nextjs`, uid 1001)
 and ships only the Next.js standalone server (`node server.js`).
 
 ## Architecture

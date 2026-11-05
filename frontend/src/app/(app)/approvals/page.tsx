@@ -74,34 +74,9 @@ export default function ApprovalsPage() {
 
   const list = useQuery<Page<Approval>>(
     `approvals:${orgId}:${view}:${offset}`,
-    async () => {
-      if (view === "pending") return api.approvals.list({ status: "pending", limit: LIMIT, offset });
-      const page = await api.approvals.list({ limit: LIMIT, offset });
-      return { ...page, items: page.items.filter((a) => a.status !== "pending") };
-    },
+    () => api.approvals.list({ decided: view === "history", limit: LIMIT, offset }),
     { interval: view === "pending" ? 15_000 : false },
   );
-
-  // Resolve project titles for the visible approvals.
-  const [titles, setTitles] = useState<Record<string, string>>({});
-  useEffect(() => {
-    const missing = Array.from(new Set((list.data?.items ?? []).map((a) => a.project_id))).filter((id) => !(id in titles));
-    if (!missing.length) return;
-    let cancelled = false;
-    void Promise.all(
-      missing.map((id) =>
-        api.projects
-          .get(id)
-          .then((p) => [id, p.title] as const)
-          .catch(() => [id, "Deleted project"] as const),
-      ),
-    ).then((pairs) => {
-      if (!cancelled) setTitles((t) => ({ ...t, ...Object.fromEntries(pairs) }));
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [list.data, titles]);
 
   const [deciding, setDeciding] = useState<{ a: Approval; d: "approve" | "reject" } | null>(null);
   const reviewer = can("reviewer");
@@ -148,7 +123,7 @@ export default function ApprovalsPage() {
                   <tr key={a.id}>
                     <td className="max-w-xs">
                       <Link href={`/projects/${a.project_id}?tab=${a.publish_job_id ? "publish" : "overview"}`} className="font-medium text-zinc-100 hover:text-accent-300">
-                        {titles[a.project_id] ?? "Loading…"}
+                        {a.project_title ?? "Deleted project"}
                       </Link>
                       <p className="text-xs text-zinc-500">{a.publish_job_id ? "Publish job" : "Project review"}</p>
                     </td>
@@ -185,7 +160,7 @@ export default function ApprovalsPage() {
         <DecisionModal
           approval={deciding.a}
           decision={deciding.d}
-          title={titles[deciding.a.project_id] ?? ""}
+          title={deciding.a.project_title ?? ""}
           onClose={() => setDeciding(null)}
           onDone={(a) => list.setData((prev) => (prev ? { ...prev, items: prev.items.filter((x) => x.id !== a.id), total: Math.max(0, prev.total - 1) } : prev))}
         />

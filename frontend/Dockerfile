@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 # Multi-stage build for the Faceless AI Studio frontend (Next.js standalone output).
 
-ARG NODE_VERSION=20-alpine
+ARG NODE_VERSION=22-alpine
 
 # ---------------------------------------------------------------- deps
 FROM node:${NODE_VERSION} AS deps
